@@ -2,9 +2,7 @@
 
 This library aims to make caching simple in asyncio code.
 
-## Decorator
-
-The easiest way of using this library is with the `@cached` decorator:
+The easiest way to use it is using the `@cached` decorator:
 
 ```
 from aiocache import cached
@@ -16,9 +14,9 @@ async def cached_func(*args, **kwargs):
 
 This will automatically store and reuse results from this function.
 
-Of course, you can tweak it to your needs
+Of course, you can tweak it to your needs:
 
-### TTL
+## TTL
 
 There are many ways to specify how long each value should stay in the cache:
 
@@ -48,7 +46,7 @@ There are many ways to specify how long each value should stay in the cache:
 
 - `function(fn, args, kwargs, value)`: An user-defined function to define the TTL based on the function, its arguments, and the result
 
-### Cache
+## Cache
 
 The cache implementation is the most important parameter in a cached function call.
 
@@ -62,7 +60,7 @@ async def cached_func(arg):
 
 The default cache is an in-memory `DictCache`
 
-### KeyMaker
+## KeyMaker
 
 The KeyMaker computes a cache key from a function call.
 
@@ -76,7 +74,7 @@ async def cached_func(arg0, arg1):
 
 The default key maker is an `ReprKeyMaker` and should be fine for most cases
 
-## Types
+## API Documentation
 
 ### Cache
 
