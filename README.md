@@ -7,6 +7,8 @@ This library aims to make caching simple in asyncio code.
 The easiest way of using this library is with the `@cached` decorator:
 
 ```
+from aiocache import cached
+
 @cached()
 async def cached_func(*args, **kwargs):
     return await doSomething()
