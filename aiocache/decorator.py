@@ -58,11 +58,12 @@ def cached(cache=DictCache(), key_maker=ReprKeyMaker(), ttl=None):
                 return value
 
             async with ongoing_lock:
-                pending = ongoing.get(key, None)
+                pending_key = key
+                pending = ongoing.get(pending_key, None)
                 if pending is None:
                     pending = asyncio.create_task(get_or_compute())
-                    ongoing[key] = pending
-                    pending.add_done_callback(lambda x: ongoing.pop(key))
+                    ongoing[pending_key] = pending
+                    pending.add_done_callback(lambda x: ongoing.pop(pending_key))
 
             return await pending
 

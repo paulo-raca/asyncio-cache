@@ -130,56 +130,47 @@ class SqliteCache(Cache):
         self.filename = filename
         self.serializer = serializer
         self.db = None
-        self.db_lock = asyncio.Lock()
 
     async def get(self, key):
-        async with self.db_lock:
-            now = self.clock.now()
-            await self._ensure_connected()
-            async with self.db.execute('SELECT value, expires_at FROM cache WHERE key = ?', (key, )) as cursor:
-                result = await cursor.fetchone()
-                if result is not None:
-                    value, expires_at = result
-                    if expires_at is None or expires_at >= now:
-                        return self.serializer.decode(value)
-            raise KeyError(key)
+        await self._ensure_connected()
+        now = self.clock.now()
+        async with self.db.execute('SELECT value, expires_at FROM cache WHERE key = ?', (key, )) as cursor:
+            result = await cursor.fetchone()
+            if result is not None:
+                value, expires_at = result
+                if expires_at is None or expires_at >= now:
+                    return self.serializer.decode(value)
+        raise KeyError(key)
 
     async def put(self, key, value, ttl=None):
-        async with self.db_lock:
-            now = self.clock.now()
-            expires_at = ttl + now if ttl is not None else None
-            await self._ensure_connected()
-            await self.db.execute("""
-                INSERT OR REPLACE INTO cache(key, value, expires_at)
-                VALUES (?, ?, ?)
-            """, (key, self.serializer.encode(value), expires_at, ))
-            await self.db.commit()
+        await self._ensure_connected()
+        now = self.clock.now()
+        expires_at = ttl + now if ttl is not None else None
+        await self.db.execute("""
+            INSERT OR REPLACE INTO cache(key, value, expires_at)
+            VALUES (?, ?, ?)
+        """, (key, self.serializer.encode(value), expires_at, ))
+        await self.db.commit()
 
     async def remove(self, key):
-        async with self.db_lock:
-            await self._ensure_connected()
-            await self.db.execute("DELETE FROM cache WHERE key = ?", (key, ))
-            await self.db.commit()
+        await self._ensure_connected()
+        await self.db.execute("DELETE FROM cache WHERE key = ?", (key, ))
+        await self.db.commit()
 
     async def remove_expired(self):
-        async with self.db_lock:
-            await self._remove_expired()
+        await self._ensure_connected()
+        now = self.clock.now()
+        await self.db.execute("DELETE FROM cache WHERE expires_at < ?", (now, ))
 
     async def data(self):
-        now = self.clock.now()
-        async with self.db_lock:
-            await self._ensure_connected()
-            async with self.db.execute('SELECT key, value, expires_at FROM cache') as cursor:
-                return {
-                    key: self.serializer.decode(value)
-                    async for key, value, expires_at in cursor
-                    if expires_at is None or expires_at >= now
-                }
-
-    async def _remove_expired(self):
-        now = self.clock.now()
         await self._ensure_connected()
-        await self.db.execute("DELETE FROM cache WHERE expires_at < ?", (now, ))
+        now = self.clock.now()
+        async with self.db.execute('SELECT key, value, expires_at FROM cache') as cursor:
+            return {
+                key: self.serializer.decode(value)
+                async for key, value, expires_at in cursor
+                if expires_at is None or expires_at >= now
+            }
 
     async def _ensure_connected(self):
         if self.db is None:
@@ -195,22 +186,21 @@ class SqliteCache(Cache):
             await self.db.execute("""
                 CREATE INDEX IF NOT EXISTS cache_expires_at_idx ON cache(expires_at);
             """)
-            await self._remove_expired()
+            await self.remove_expired()
             await self.db.commit()
 
     async def _close(self) -> None:
         if self.db is not None:
-            await self.db.close()
+            db = self.db
             self.db = None
+            await db.close()
 
     async def __aenter__(self):
-        async with self.db_lock:
-            await self._ensure_connected()
-            return self
+        await self._ensure_connected()
+        return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        async with self.db_lock:
-            await self._close()
+        await self.close()
 
     async def close(self):
         async with self.db_lock:
