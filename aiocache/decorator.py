@@ -1,7 +1,8 @@
+import random
+import asyncio
 from functools import wraps
 from .cache import DictCache
 from .key import ReprKeyMaker
-import random
 from datetime import timedelta
 
 def _parse_timedelta(t):
@@ -36,21 +37,35 @@ def _parse_ttl_function(ttl):
 
 def cached(cache=DictCache(), key_maker=ReprKeyMaker(), ttl=None):
     ttl = _parse_ttl_function(ttl)
+    ongoing = {}
+    ongoing_lock = asyncio.Lock()
+
 
     def decorator(fn):
         @wraps(fn)
         async def wrapper(*args, **kwargs):
             key = key_maker(fn, args, kwargs)
-            try:
-                return await cache.get(key)
-            except KeyError:
-                pass
 
-            value = await fn(*args, **kwargs)
-            value_ttl = ttl(fn, args, kwargs, value)
-            print("TTL=", value_ttl)
-            await cache.put(key, value, value_ttl)
-            return value
+            async def get_or_compute():
+                try:
+                    return await cache.get(key)
+                except KeyError:
+                    pass
+
+                value = await fn(*args, **kwargs)
+                value_ttl = ttl(fn, args, kwargs, value)
+                await cache.put(key, value, value_ttl)
+                return value
+
+            async with ongoing_lock:
+                pending = ongoing.get(key, None)
+                if pending is None:
+                    pending = asyncio.create_task(get_or_compute())
+                    ongoing[key] = pending
+                    pending.add_done_callback(lambda x: ongoing.pop(key))
+
+            return await pending
+
 
         async def invalidate(*args, **kwargs):
             key = key_maker(fn, args, kwargs)

@@ -97,4 +97,25 @@ class DecoratorTest(aiounittest.AsyncTestCase):
         for i in range(100):
             await cached_func(i)
 
+    async def test_concurrent(self):
+        n = [0]
+        from .decorator import cached
+        @cached(ttl=-1)
+        async def next_int():
+            await asyncio.sleep(0)
+            n[0] += 1
+            return n[0]
 
+        rets = await asyncio.gather(*[
+            next_int()
+            for x in range(10)
+        ])
+        print(rets)
+        assert rets == [1] * 10
+
+        rets = [
+            await next_int()
+            for x in range(10)
+        ]
+        print(rets)
+        assert rets == list(range(2, 12))

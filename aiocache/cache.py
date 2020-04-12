@@ -93,6 +93,7 @@ class DictCache(Cache):
         value, expires_at = self._data[key]
         if expires_at is None or expires_at >= now:
             return value
+        raise KeyError(key)
 
     async def put(self, key, value, ttl=None):
         now = self.clock.now()
